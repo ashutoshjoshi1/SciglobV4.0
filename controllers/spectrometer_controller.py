@@ -4,7 +4,15 @@ from PyQt5.QtCore import QObject, pyqtSignal, QTimer
 from PyQt5.QtWidgets import QGroupBox, QVBoxLayout, QHBoxLayout, QPushButton, QTabWidget, QWidget, QVBoxLayout as QVBoxLayout2
 import pyqtgraph as pg
 
-from drivers.spectrometer import connect_spectrometer, AVS_MeasureCallback, AVS_MeasureCallbackFunc, AVS_GetScopeData, StopMeasureThread
+from drivers.spectrometer import (
+    connect_spectrometer,
+    prepare_measurement,
+    AVS_MeasureCallback,
+    AVS_MeasureCallbackFunc,
+    AVS_GetScopeData,
+    StopMeasureThread
+)
+
 
 class SpectrometerController(QObject):
     status_signal = pyqtSignal(str)
