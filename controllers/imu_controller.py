@@ -1,9 +1,10 @@
 import serial, cv2
 import numpy as np
-from serial.tools import list_ports
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer, Qt
-from PyQt5.QtWidgets import QGroupBox, QVBoxLayout, QLabel, QGraphicsRectItem
-from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtWidgets import (
+    QGroupBox, QVBoxLayout, QLabel, QGraphicsRectItem
+)
+from PyQt5.QtGui import QImage, QPixmap, QTransform
 import pyqtgraph as pg
 
 from drivers.imu import start_imu_read_thread
@@ -51,7 +52,7 @@ class IMUController(QObject):
             'pressure': 0
         }
 
-        # Auto-connect from config
+        # Auto-connect using config
         if parent is not None and hasattr(parent, 'config'):
             cfg_port = parent.config.get("imu")
             cfg_baud = parent.config.get("imu_baud", 115200)
@@ -91,16 +92,15 @@ class IMUController(QObject):
             f"Lat={lat:.5f}, Lon={lon:.5f}"
         )
 
-        # Apply roll (x-rotation) and pitch (y-tilt) to rectangle
+        # Apply roll and pitch to rectangle motion
         roll = np.deg2rad(r)
         pitch = np.deg2rad(p)
-        cos_r, sin_r = np.cos(roll), np.sin(roll)
 
-        # You can also include pitch as a scaling or y-offset for realism
-        transform = QtGui.QTransform(
+        cos_r, sin_r = np.cos(roll), np.sin(roll)
+        transform = QTransform(
             cos_r, -sin_r,
             sin_r, cos_r,
-            0, -pitch  # vertical shift simulating tilt
+            0, -pitch  # Vertical movement simulating pitch tilt
         )
         self.rect_item.setTransform(transform)
 
