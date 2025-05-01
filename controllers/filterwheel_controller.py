@@ -19,7 +19,7 @@ class FilterWheelController(QObject):
         self.port_combo.setEditable(True)
         ports = [p.device for p in list_ports.comports()]
         self.port_combo.addItems(ports or [f"COM{i}" for i in range(1, 10)])
-        # Use configured port if available
+
         default_port = "COM17"
         if parent is not None and hasattr(parent, 'config'):
             default_port = parent.config.get("filterwheel", default_port)
@@ -56,8 +56,7 @@ class FilterWheelController(QObject):
             self.serial = ser
             self._connected = True
             self.send_btn.setEnabled(True)
-            # Reset filter wheel to position 1 on connect
-            self._send("F1r")
+            self._send("F1r")  # Reset to position 1
         else:
             self._connected = False
             self.send_btn.setEnabled(False)
@@ -78,10 +77,22 @@ class FilterWheelController(QObject):
     def _on_result(self, pos, msg):
         self.send_btn.setEnabled(True)
         self.status_signal.emit(msg)
-        # Update position label if query or after movement
-        if pos is not None:
-            self.pos_label.setText(str(pos))
+
+        if self.last:
+            if self.last == "F1r":
+                self.pos_label.setText("1")
+            elif self.last.startswith("F1") and len(self.last) == 3 and self.last[2].isdigit():
+                self.pos_label.setText(self.last[2])
+            else:
+                if pos is not None:
+                    self.pos_label.setText(str(pos))
         self.last = None
+
+    def get_position(self):
+        try:
+            return int(self.pos_label.text())
+        except:
+            return 0
 
     def is_connected(self):
         return self._connected
