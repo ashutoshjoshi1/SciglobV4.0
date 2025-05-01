@@ -1,13 +1,13 @@
 import serial, cv2
 import numpy as np
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer, Qt
-from PyQt5.QtWidgets import (
-    QGroupBox, QVBoxLayout, QLabel, QGraphicsRectItem
-)
-from PyQt5.QtGui import QImage, QPixmap, QTransform
-import pyqtgraph as pg
+from PyQt5.QtWidgets import QGroupBox, QVBoxLayout, QLabel
+from PyQt5.QtGui import QImage, QPixmap
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+import matplotlib.pyplot as plt
 
 from drivers.imu import start_imu_read_thread
+import utils
 
 class IMUController(QObject):
     status_signal = pyqtSignal(str)
@@ -21,15 +21,12 @@ class IMUController(QObject):
         self.data_label = QLabel("Not connected")
         v.addWidget(self.data_label)
 
-        # Motion view: rectangle that rotates/tilts with IMU
-        self.motion_view = pg.GraphicsLayoutWidget()
-        self.plot_item = self.motion_view.addPlot()
-        self.plot_item.setAspectLocked(True)
-        self.plot_item.setRange(xRange=[-2, 2], yRange=[-2, 2])
-        self.rect_item = QGraphicsRectItem(-0.5, -0.5, 1, 1)
-        self.rect_item.setPen(pg.mkPen('b', width=2))
-        self.plot_item.addItem(self.rect_item)
-        v.addWidget(self.motion_view)
+        # 3D orientation plot
+        self.fig = plt.figure()
+        self.ax = self.fig.add_subplot(111, projection='3d')
+        utils.draw_device_orientation(self.ax, 0, 0, 0, 0, 0)
+        self.canvas = FigureCanvas(self.fig)
+        v.addWidget(self.canvas)
 
         # Camera feed
         self.cam_label = QLabel()
@@ -52,7 +49,7 @@ class IMUController(QObject):
             'pressure': 0
         }
 
-        # Auto-connect using config
+        # Auto-connect if config provided
         if parent is not None and hasattr(parent, 'config'):
             cfg_port = parent.config.get("imu")
             cfg_baud = parent.config.get("imu_baud", 115200)
@@ -91,18 +88,10 @@ class IMUController(QObject):
             f"T={t:.1f}°C, P={pres:.1f}hPa\n"
             f"Lat={lat:.5f}, Lon={lon:.5f}"
         )
-
-        # Apply roll and pitch to rectangle motion
-        roll = np.deg2rad(r)
-        pitch = np.deg2rad(p)
-
-        cos_r, sin_r = np.cos(roll), np.sin(roll)
-        transform = QTransform(
-            cos_r, -sin_r,
-            sin_r, cos_r,
-            0, -pitch  # Vertical movement simulating pitch tilt
-        )
-        self.rect_item.setTransform(transform)
+        # Update 3D orientation
+        self.ax.cla()
+        utils.draw_device_orientation(self.ax, r, p, y, lat, lon)
+        self.canvas.draw()
 
     def is_connected(self):
         return self._connected
