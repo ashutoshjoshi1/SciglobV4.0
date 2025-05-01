@@ -49,7 +49,7 @@ class IMUController(QObject):
             'pressure': 0
         }
 
-        # Auto-connect if config provided
+        # Auto-connect using config
         if parent is not None and hasattr(parent, 'config'):
             cfg_port = parent.config.get("imu")
             cfg_baud = parent.config.get("imu_baud", 115200)
@@ -88,7 +88,7 @@ class IMUController(QObject):
             f"T={t:.1f}°C, P={pres:.1f}hPa\n"
             f"Lat={lat:.5f}, Lon={lon:.5f}"
         )
-        # Update 3D orientation
+
         self.ax.cla()
         utils.draw_device_orientation(self.ax, r, p, y, lat, lon)
         self.canvas.draw()
