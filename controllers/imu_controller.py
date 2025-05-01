@@ -2,9 +2,8 @@ import serial, cv2
 import numpy as np
 from serial.tools import list_ports
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer, Qt
-from PyQt5.QtWidgets import QGroupBox, QVBoxLayout, QLabel
+from PyQt5.QtWidgets import QGroupBox, QVBoxLayout, QLabel, QGraphicsRectItem
 from PyQt5.QtGui import QImage, QPixmap
-from pyqtgraph.Qt import QtGui
 import pyqtgraph as pg
 
 from drivers.imu import start_imu_read_thread
@@ -26,7 +25,7 @@ class IMUController(QObject):
         self.plot_item = self.motion_view.addPlot()
         self.plot_item.setAspectLocked(True)
         self.plot_item.setRange(xRange=[-2, 2], yRange=[-2, 2])
-        self.rect_item = QtGui.QGraphicsRectItem(-0.5, -0.5, 1, 1)
+        self.rect_item = QGraphicsRectItem(-0.5, -0.5, 1, 1)
         self.rect_item.setPen(pg.mkPen('b', width=2))
         self.plot_item.addItem(self.rect_item)
         v.addWidget(self.motion_view)
