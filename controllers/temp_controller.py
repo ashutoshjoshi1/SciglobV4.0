@@ -54,10 +54,11 @@ class TempController(QObject):
             self.status_signal.emit("Invalid setpoint")
             return
         try:
-            self.tc.set_temperature(t)
+            self.tc.set_setpoint(t)  # ← FIXED LINE
             self.status_signal.emit(f"SP={t:.1f}°C")
         except Exception as e:
             self.status_signal.emit(f"Set fail: {e}")
+
 
     def _upd(self):
         try:
