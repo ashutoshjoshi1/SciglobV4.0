@@ -16,29 +16,30 @@ class IMUController(QObject):
         super().__init__(parent)
         self.groupbox = QGroupBox("IMU")
         self.groupbox.setObjectName("imuGroup")
-        v = QVBoxLayout()
+        layout = QVBoxLayout()
 
         self.data_label = QLabel("Not connected")
-        v.addWidget(self.data_label)
+        layout.addWidget(self.data_label)
 
         # 3D orientation plot
         self.fig = plt.figure()
         self.ax = self.fig.add_subplot(111, projection='3d')
         utils.draw_device_orientation(self.ax, 0, 0, 0, 0, 0)
         self.canvas = FigureCanvas(self.fig)
-        v.addWidget(self.canvas)
+        layout.addWidget(self.canvas)
 
         # Camera feed
         self.cam_label = QLabel()
         self.cam_label.setFixedHeight(200)
         self.cam_label.setAlignment(Qt.AlignCenter)
-        v.addWidget(self.cam_label)
+        layout.addWidget(self.cam_label)
         self.cam = cv2.VideoCapture(0)
         self.cam_timer = QTimer(self)
         self.cam_timer.timeout.connect(self._update_cam)
         self.cam_timer.start(30)
 
-        self.groupbox.setLayout(v)
+        self.groupbox.setLayout(layout)
+
         self._connected = False
         self.serial = None
         self.latest = {
@@ -46,10 +47,13 @@ class IMUController(QObject):
             'latitude': 0,
             'longitude': 0,
             'temperature': 0,
-            'pressure': 0
+            'pressure': 0,
+            'accel': (0, 0, 0),
+            'gyro': (0, 0, 0),
+            'mag': (0, 0, 0)
         }
 
-        # Auto-connect using config
+        # Auto-connect if config is available
         if parent is not None and hasattr(parent, 'config'):
             cfg_port = parent.config.get("imu")
             cfg_baud = parent.config.get("imu_baud", 115200)
@@ -58,11 +62,13 @@ class IMUController(QObject):
 
     def connect(self, port, baud):
         if self._connected:
-            return self.status_signal.emit("IMU already connected.")
+            self.status_signal.emit("IMU already connected.")
+            return
         try:
             self.serial = serial.Serial(port, baud, timeout=1)
         except Exception as e:
-            return self.status_signal.emit(f"IMU connection failed: {e}")
+            self.status_signal.emit(f"IMU connection failed: {e}")
+            return
         self._connected = True
         self.status_signal.emit(f"IMU connected on {port}@{baud}")
         self.stop_evt = start_imu_read_thread(self.serial, self.latest)
@@ -80,15 +86,18 @@ class IMUController(QObject):
                 self.cam_label.setPixmap(QPixmap.fromImage(img))
 
     def _refresh(self):
-        r, p, y = self.latest['rpy']
-        lat, lon = self.latest['latitude'], self.latest['longitude']
-        t, pres = self.latest['temperature'], self.latest['pressure']
+        r, p, y = self.latest.get('rpy', (0, 0, 0))
+        lat = self.latest.get('latitude', 0)
+        lon = self.latest.get('longitude', 0)
+        t = self.latest.get('temperature', 0)
+        pres = self.latest.get('pressure', 0)
         self.data_label.setText(
             f"R={r:.1f}°, P={p:.1f}°, Y={y:.1f}°\n"
             f"T={t:.1f}°C, P={pres:.1f}hPa\n"
             f"Lat={lat:.5f}, Lon={lon:.5f}"
         )
 
+        # Update 3D plot
         self.ax.cla()
         utils.draw_device_orientation(self.ax, r, p, y, lat, lon)
         self.canvas.draw()
