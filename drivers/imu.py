@@ -3,7 +3,7 @@ import threading
 
 def parse_imu_packet(packet: bytes):
     """Parse an 11-byte WitMotion IMU packet. Returns a tuple (label, *values)."""
-    # Packet structure: [0]=0x55, [1]=ID, [2:10]=data, [10]=checksum
+    # Packet structure: [0]=0x55, [1]=ID , [2:10]=data, [10]=checksum
     data_bytes = packet[2:10]  # 8 data bytes (little-endian)
     packet_id = packet[1]
     if packet_id == 0x53:
