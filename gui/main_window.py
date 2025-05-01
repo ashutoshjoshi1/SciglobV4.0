@@ -22,7 +22,6 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Spectrometer, Motor, IMU & Temperature Control")
         self.setMinimumSize(1920, 1000)
 
-        # Load hardware configuration
         self.config = {}
         try:
             config_path = os.path.join(os.path.dirname(__file__), "..", "hardware_config.json")
@@ -31,27 +30,19 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"Config load error: {e}")
 
-        # in-memory stores
-        self.latest_data = {}   # IMU/Temp/GPS raw data dict
-        self.wavelengths = []   # Spectrometer wavelengths
-        self.intensities = []   # Spectrometer intensities
+        self.latest_data = {}
+        self.pixel_counts = []
 
-        # THP sensor
         thp_port = self.config.get("thp_sensor", "COM8")
         self.thp_ctrl = THPController(port=thp_port, parent=self)
         self.thp_ctrl.status_signal.connect(self.statusBar().showMessage)
 
-
-        # status bar
-        # self.statusBar() = QStatusBar()
         self.setStatusBar(QStatusBar())
 
-        # central layout
         central = QWidget()
         self.setCentralWidget(central)
         main_layout = QVBoxLayout(central)
 
-        # controllers and their UI widgets
         self.temp_ctrl = TempController(parent=self)
         self.temp_ctrl.status_signal.connect(self.statusBar().showMessage)
         self.temp_ctrl.status_signal.connect(self.handle_status_message)
@@ -72,7 +63,6 @@ class MainWindow(QMainWindow):
         self.imu_ctrl.status_signal.connect(self.statusBar().showMessage)
         self.imu_ctrl.status_signal.connect(self.handle_status_message)
 
-        # add widgets to main layout
         main_layout.addWidget(self.temp_ctrl.widget)
 
         splitter = QSplitter(Qt.Horizontal)
@@ -83,25 +73,21 @@ class MainWindow(QMainWindow):
         grid.addWidget(self.thp_ctrl.groupbox, 2, 0, 1, 2)
         grid.addWidget(self.motor_ctrl.groupbox, 0, 0)
         grid.addWidget(self.filter_ctrl.groupbox, 0, 1)
-        # Span IMU groupbox across both columns in the second row
         grid.addWidget(self.imu_ctrl.groupbox, 1, 0, 1, 2)
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
 
         splitter.addWidget(right_panel)
-        # Adjust splitter ratios to expand spectrometer display
         splitter.setStretchFactor(0, 2)
         splitter.setStretchFactor(1, 1)
 
         main_layout.addWidget(splitter)
 
-        # status indicators update timer
         self.status_timer = QTimer(self)
         self.status_timer.timeout.connect(self._update_indicators)
         self.status_timer.start(1000)
         self._update_indicators()
 
-        # data directories and file handles
         self.csv_dir = "data"
         self.log_dir = "data"
         os.makedirs(self.csv_dir, exist_ok=True)
@@ -110,15 +96,11 @@ class MainWindow(QMainWindow):
         self.log_file = None
         self.continuous_saving = False
 
-        # timer for continuous data saving
         self.save_data_timer = QTimer(self)
         self.save_data_timer.timeout.connect(self.save_continuous_data)
-        # (Spectrometer measurement is started in SpectrometerController when connected)
 
     def toggle_data_saving(self):
         if not self.continuous_saving:
-            # --- START LOGGING ---
-            # Close any existing files
             if self.csv_file:
                 self.csv_file.close()
             if self.log_file:
@@ -132,54 +114,36 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 self.statusBar().showMessage(f"Cannot open files: {e}")
                 return
-            # Write CSV header
             headers = [
-                "Timestamp",
-                "MotorPos_steps", "MotorSpeed_steps_s", "MotorCurrent_pct",
-                "MotorAlarmCode", "MotorTemp_C", "MotorAngle_deg",
-                "FilterPos",
-                "Roll_deg", "Pitch_deg", "Yaw_deg",
-                "AccelX_g", "AccelY_g", "AccelZ_g",
-                "GyroX_dps", "GyroY_dps", "GyroZ_dps",
-                "MagX_uT", "MagY_uT", "MagZ_uT",
-                "Pressure_hPa", "Temperature_C",  # Environmental pressure & temperature
-                "TempCtrl_curr", "TempCtrl_set",  # Temperature controller current & setpoint
-                "Latitude_deg", "Longitude_deg",
-                "IntegrationTime_us"
+                "Timestamp", "MotorPos_steps", "MotorSpeed_steps_s", "MotorCurrent_pct",
+                "MotorAlarmCode", "MotorTemp_C", "MotorAngle_deg", "FilterPos",
+                "Roll_deg", "Pitch_deg", "Yaw_deg", "AccelX_g", "AccelY_g", "AccelZ_g",
+                "GyroX_dps", "GyroY_dps", "GyroZ_dps", "MagX_uT", "MagY_uT", "MagZ_uT",
+                "Pressure_hPa", "Temperature_C", "TempCtrl_curr", "TempCtrl_set",
+                "Latitude_deg", "Longitude_deg", "IntegrationTime_us",
+                "THP_Temp_C", "THP_Humidity_pct", "THP_Pressure_hPa"
             ]
-            headers.extend(["THP_Temp_C", "THP_Humidity_pct", "THP_Pressure_hPa"])
-
-            # If wavelengths are known (spectrometer connected), add intensity columns for each wavelength
-            for wl in self.wavelengths:
-                headers.append(f"I_{wl:.1f}nm")
+            headers += [f"Pixel_{i}" for i in range(len(self.spec_ctrl.intens))]
             self.csv_file.write(",".join(headers) + "\n")
             self.csv_file.flush()
             os.fsync(self.csv_file.fileno())
-
-            # Start continuous saving
             self.save_data_timer.start(1000)
             self.continuous_saving = True
-            # Update UI button text
             self.spec_ctrl.toggle_btn.setText("Pause Saving")
             self.statusBar().showMessage("Saving started…")
-            # Log this event
             self.handle_status_message("Saving started")
         else:
-            # --- STOP LOGGING ---
             self.continuous_saving = False
             self.save_data_timer.stop()
             if self.csv_file:
                 self.csv_file.close()
             if self.log_file:
                 self.log_file.close()
-            # Reset UI button text
             self.spec_ctrl.toggle_btn.setText("Start Saving")
             self.statusBar().showMessage("Saving stopped.")
-            # Log this event
             self.handle_status_message("Saving stopped")
 
     def save_continuous_data(self):
-        """Poll every controller for its current data, then write a CSV row."""
         if not (self.csv_file and self.log_file):
             return
         try:
@@ -187,20 +151,17 @@ class MainWindow(QMainWindow):
             ts_csv = now.toString("yyyy-MM-dd hh:mm:ss.zzz")
             ts_txt = now.toString("yyyy-MM-dd hh:mm:ss")
 
-            # 1) Motor data
-            motor_pos = getattr(self.motor_ctrl, "current_angle", 0)  # steps or angle
+            motor_pos = getattr(self.motor_ctrl, "current_angle", 0)
             motor_speed = getattr(self.motor_ctrl, "current_speed", 0)
             motor_current_pct = getattr(self.motor_ctrl, "current_percent", 0)
             motor_alarm = getattr(self.motor_ctrl, "alarm_code", 0)
             motor_temp = getattr(self.motor_ctrl, "temperature", 0)
             motor_angle = getattr(self.motor_ctrl, "current_angle_deg", 0)
 
-            # 2) Filter wheel position
             filter_pos = self.filter_ctrl.get_position()
             if filter_pos is None:
                 filter_pos = getattr(self.filter_ctrl, "current_position", 0)
 
-            # 3) IMU / GPS / pressure (environmental)
             imu = getattr(self.imu_ctrl, "latest", {})
             r, p, y = imu.get("rpy", (0, 0, 0))
             ax, ay, az = imu.get("accel", (0, 0, 0))
@@ -211,55 +172,34 @@ class MainWindow(QMainWindow):
             lat = imu.get("latitude", 0)
             lon = imu.get("longitude", 0)
 
-            # 4) Temperature controller
-            tc_curr = getattr(self.temp_ctrl, "current_temp", 0)    # current temperature (°C)
-            tc_set = getattr(self.temp_ctrl, "setpoint", 0)         # setpoint temperature (°C)
+            tc_curr = getattr(self.temp_ctrl, "current_temp", 0)
+            tc_set = getattr(self.temp_ctrl, "setpoint", 0)
 
-            # 5) Spectrometer data (latest intensities and integration time)
-            wavelengths = self.wavelengths
-            intensities = self.intensities
+            intensities = self.spec_ctrl.intens  # Pixel counts
             integ_us = getattr(self, "current_integration_time_us", 0)
 
-            # 6) THP Sensor data
             thp = self.thp_ctrl.get_latest()
             thp_temp = thp.get("temperature", 0)
             thp_hum = thp.get("humidity", 0)
             thp_pres = thp.get("pressure", 0)
 
-
-            # Build CSV row
             row = [
-                ts_csv,
-                str(motor_pos), str(motor_speed), f"{motor_current_pct:.1f}",
-                str(motor_alarm), str(motor_temp), str(motor_angle),
-                str(filter_pos),
-                f"{r:.2f}", f"{p:.2f}", f"{y:.2f}",
-                f"{ax:.2f}", f"{ay:.2f}", f"{az:.2f}",
-                f"{gx:.2f}", f"{gy:.2f}", f"{gz:.2f}",
-                f"{mx:.2f}", f"{my:.2f}", f"{mz:.2f}",
-                f"{pres:.2f}", f"{temp_env:.2f}",
-                f"{tc_curr:.2f}", f"{tc_set:.2f}",
-                f"{lat:.6f}", f"{lon:.6f}",
-                str(integ_us),
-                f"{thp_temp:.2f}", f"{thp_hum:.2f}", f"{thp_pres:.2f}"
+                ts_csv, str(motor_pos), str(motor_speed), f"{motor_current_pct:.1f}",
+                str(motor_alarm), str(motor_temp), str(motor_angle), str(filter_pos),
+                f"{r:.2f}", f"{p:.2f}", f"{y:.2f}", f"{ax:.2f}", f"{ay:.2f}", f"{az:.2f}",
+                f"{gx:.2f}", f"{gy:.2f}", f"{gz:.2f}", f"{mx:.2f}", f"{my:.2f}", f"{mz:.2f}",
+                f"{pres:.2f}", f"{temp_env:.2f}", f"{tc_curr:.2f}", f"{tc_set:.2f}",
+                f"{lat:.6f}", f"{lon:.6f}", str(integ_us), f"{thp_temp:.2f}",
+                f"{thp_hum:.2f}", f"{thp_pres:.2f}"
             ]
-            # Append intensity values (only non-zero intensities to save space, if desired)
-            for inten in intensities:
-                # If recording only non-zero intensities, uncomment next line:
-                # if inten == 0: continue
-                row.append(f"{inten:.4f}")
+            row.extend([f"{val:.4f}" for val in intensities])
             line = ",".join(row) + "\n"
             self.csv_file.write(line)
             self.csv_file.flush()
             os.fsync(self.csv_file.fileno())
 
-            # For log file, log peak intensity value for reference (could be considered an event)
-            if intensities:
-                peak = max(intensities)
-            else:
-                peak = 0
+            peak = max(intensities) if intensities else 0
             txt_line = f"{ts_txt} | Peak {peak:.1f}\n"
-            # We will treat this as informational data rather than a hardware event
             self.log_file.write(txt_line)
             self.log_file.flush()
             os.fsync(self.log_file.fileno())
