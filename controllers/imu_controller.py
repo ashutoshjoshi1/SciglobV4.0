@@ -6,6 +6,8 @@ from PyQt5.QtGui import QImage, QPixmap
 
 from drivers.imu import start_imu_read_thread
 import utils
+import pyqtgraph as pg
+import numpy as np
 
 class IMUController(QObject):
     status_signal = pyqtSignal(str)
@@ -32,6 +34,16 @@ class IMUController(QObject):
         v.addLayout(h)
         self.data_label = QLabel("Not connected")
         v.addWidget(self.data_label)
+        # Motion view: rectangle that rotates/tilts with IMU
+        self.motion_view = pg.GraphicsLayoutWidget()
+        self.plot_item = self.motion_view.addPlot()
+        self.plot_item.setAspectLocked(True)
+        self.plot_item.setRange(xRange=[-2, 2], yRange=[-2, 2])
+        self.rect_item = pg.QtGui.QGraphicsRectItem(-0.5, -0.5, 1, 1)
+        self.rect_item.setPen(pg.mkPen('b', width=2))
+        self.plot_item.addItem(self.rect_item)
+        v.addWidget(self.motion_view)
+
 
         # 3D orientation plot (disabled per requirements)
         # self.fig = plt.figure(); self.ax = self.fig.add_subplot(111, projection='3d')
@@ -98,6 +110,19 @@ class IMUController(QObject):
         self.data_label.setText(f"R={r:.1f}°, P={p:.1f}°, Y={y:.1f}°\n"
                                  f"T={t:.1f}°C, P={pres:.1f}hPa\n"
                                  f"Lat={lat:.5f}, Lon={lon:.5f}")
+        # Rotate rectangle based on pitch (up/down) and roll (side tilt)
+        theta = np.deg2rad(self.latest['rpy'][0])  # Roll
+        phi = np.deg2rad(self.latest['rpy'][1])   # Pitch
+        
+        # 2D rotation based on roll for simple tilt effect
+        cos_r, sin_r = np.cos(theta), np.sin(theta)
+        transform = pg.QtGui.QTransform(
+            cos_r, -sin_r,
+            sin_r, cos_r,
+            0, 0
+        )
+        self.rect_item.setTransform(transform)
+
 
     def is_connected(self):
         return self._connected
