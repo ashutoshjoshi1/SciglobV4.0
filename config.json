@@ -1,0 +1,9 @@
+{
+    "filterwheel": "COM3",
+    "imu": "COM4",
+    "motor": "COM5",
+    "spectrometer": "COM6",
+    "temp_controller": "COM7",
+    "thp_sensor": "COM8"
+  }
+  
