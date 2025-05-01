@@ -39,12 +39,12 @@ class MainWindow(QMainWindow):
         # THP sensor
         thp_port = self.config.get("thp_sensor", "COM8")
         self.thp_ctrl = THPController(port=thp_port, parent=self)
-        self.thp_ctrl.status_signal.connect(self.status_bar.showMessage)
+        self.thp_ctrl.status_signal.connect(self.statusBar().showMessage)
 
 
         # status bar
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
+        # self.statusBar() = QStatusBar()
+        self.setStatusBar(QStatusBar())
 
         # central layout
         central = QWidget()
@@ -53,23 +53,23 @@ class MainWindow(QMainWindow):
 
         # controllers and their UI widgets
         self.temp_ctrl = TempController(parent=self)
-        self.temp_ctrl.status_signal.connect(self.status_bar.showMessage)
+        self.temp_ctrl.status_signal.connect(self.statusBar().showMessage)
         self.temp_ctrl.status_signal.connect(self.handle_status_message)
 
         self.spec_ctrl = SpectrometerController(parent=self)
-        self.spec_ctrl.status_signal.connect(self.status_bar.showMessage)
+        self.spec_ctrl.status_signal.connect(self.statusBar().showMessage)
         self.spec_ctrl.status_signal.connect(self.handle_status_message)
 
         self.motor_ctrl = MotorController(parent=self)
-        self.motor_ctrl.status_signal.connect(self.status_bar.showMessage)
+        self.motor_ctrl.status_signal.connect(self.statusBar().showMessage)
         self.motor_ctrl.status_signal.connect(self.handle_status_message)
 
         self.filter_ctrl = FilterWheelController(parent=self)
-        self.filter_ctrl.status_signal.connect(self.status_bar.showMessage)
+        self.filter_ctrl.status_signal.connect(self.statusBar().showMessage)
         self.filter_ctrl.status_signal.connect(self.handle_status_message)
 
         self.imu_ctrl = IMUController(parent=self)
-        self.imu_ctrl.status_signal.connect(self.status_bar.showMessage)
+        self.imu_ctrl.status_signal.connect(self.statusBar().showMessage)
         self.imu_ctrl.status_signal.connect(self.handle_status_message)
 
         # add widgets to main layout
@@ -130,7 +130,7 @@ class MainWindow(QMainWindow):
                 self.csv_file = open(self.csv_file_path, "w", encoding="utf-8", newline="")
                 self.log_file = open(self.log_file_path, "w", encoding="utf-8")
             except Exception as e:
-                self.status_bar.showMessage(f"Cannot open files: {e}")
+                self.statusBar().showMessage(f"Cannot open files: {e}")
                 return
             # Write CSV header
             headers = [
@@ -161,7 +161,7 @@ class MainWindow(QMainWindow):
             self.continuous_saving = True
             # Update UI button text
             self.spec_ctrl.toggle_btn.setText("Pause Saving")
-            self.status_bar.showMessage("Saving started…")
+            self.statusBar().showMessage("Saving started…")
             # Log this event
             self.handle_status_message("Saving started")
         else:
@@ -174,7 +174,7 @@ class MainWindow(QMainWindow):
                 self.log_file.close()
             # Reset UI button text
             self.spec_ctrl.toggle_btn.setText("Start Saving")
-            self.status_bar.showMessage("Saving stopped.")
+            self.statusBar().showMessage("Saving stopped.")
             # Log this event
             self.handle_status_message("Saving stopped")
 
@@ -196,7 +196,7 @@ class MainWindow(QMainWindow):
             motor_angle = getattr(self.motor_ctrl, "current_angle_deg", 0)
 
             # 2) Filter wheel position
-            filter_pos = getattr(self.filter_ctrl, "last_position", None)
+            filter_pos = self.filter_ctrl.get_position()
             if filter_pos is None:
                 filter_pos = getattr(self.filter_ctrl, "current_position", 0)
 
@@ -240,8 +240,8 @@ class MainWindow(QMainWindow):
                 f"{pres:.2f}", f"{temp_env:.2f}",
                 f"{tc_curr:.2f}", f"{tc_set:.2f}",
                 f"{lat:.6f}", f"{lon:.6f}",
-                f"{thp_temp:.2f}", f"{thp_hum:.2f}", f"{thp_pres:.2f}",
-                str(integ_us)
+                str(integ_us),
+                f"{thp_temp:.2f}", f"{thp_hum:.2f}", f"{thp_pres:.2f}"
             ]
             # Append intensity values (only non-zero intensities to save space, if desired)
             for inten in intensities:
@@ -265,7 +265,7 @@ class MainWindow(QMainWindow):
             os.fsync(self.log_file.fileno())
         except Exception as e:
             print("save_continuous_data error:", e)
-            self.status_bar.showMessage(f"Save error: {e}")
+            self.statusBar().showMessage(f"Save error: {e}")
 
     def _update_indicators(self):
         # Update groupbox titles with connection status (green if connected, red if not)
