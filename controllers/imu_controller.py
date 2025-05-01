@@ -1,13 +1,13 @@
 import serial, cv2
+import numpy as np
 from serial.tools import list_ports
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer, Qt
-from PyQt5.QtWidgets import QGroupBox, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton
+from PyQt5.QtWidgets import QGroupBox, QVBoxLayout, QLabel
 from PyQt5.QtGui import QImage, QPixmap
+from pyqtgraph.Qt import QtGui
+import pyqtgraph as pg
 
 from drivers.imu import start_imu_read_thread
-import utils
-import pyqtgraph as pg
-import numpy as np
 
 class IMUController(QObject):
     status_signal = pyqtSignal(str)
@@ -17,38 +17,19 @@ class IMUController(QObject):
         self.groupbox = QGroupBox("IMU")
         self.groupbox.setObjectName("imuGroup")
         v = QVBoxLayout()
-        h = QHBoxLayout()
-        h.addWidget(QLabel("COM:"))
-        self.port_combo = QComboBox()
-        self.port_combo.setEditable(True)
-        ports = [p.device for p in list_ports.comports()]
-        self.port_combo.addItems(ports or [f"COM{i}" for i in range(1, 10)])
-        h.addWidget(self.port_combo)
-        h.addWidget(QLabel("Baud:"))
-        self.baud_combo = QComboBox()
-        self.baud_combo.addItems(["9600", "57600", "115200"])
-        h.addWidget(self.baud_combo)
-        self.connect_btn = QPushButton("Connect")
-        self.connect_btn.clicked.connect(self.connect)
-        h.addWidget(self.connect_btn)
-        v.addLayout(h)
+
         self.data_label = QLabel("Not connected")
         v.addWidget(self.data_label)
+
         # Motion view: rectangle that rotates/tilts with IMU
         self.motion_view = pg.GraphicsLayoutWidget()
         self.plot_item = self.motion_view.addPlot()
         self.plot_item.setAspectLocked(True)
         self.plot_item.setRange(xRange=[-2, 2], yRange=[-2, 2])
-        self.rect_item = pg.QtGui.QGraphicsRectItem(-0.5, -0.5, 1, 1)
+        self.rect_item = QtGui.QGraphicsRectItem(-0.5, -0.5, 1, 1)
         self.rect_item.setPen(pg.mkPen('b', width=2))
         self.plot_item.addItem(self.rect_item)
         v.addWidget(self.motion_view)
-
-
-        # 3D orientation plot (disabled per requirements)
-        # self.fig = plt.figure(); self.ax = self.fig.add_subplot(111, projection='3d')
-        # utils.draw_device_orientation(self.ax, 0, 0, 0, 0, 0)
-        # v.addWidget(FigureCanvas(self.fig))
 
         # Camera feed
         self.cam_label = QLabel()
@@ -63,33 +44,31 @@ class IMUController(QObject):
         self.groupbox.setLayout(v)
         self._connected = False
         self.serial = None
-        self.latest = {'rpy': (0, 0, 0), 'latitude': 0, 'longitude': 0, 'temperature': 0, 'pressure': 0}
+        self.latest = {
+            'rpy': (0, 0, 0),
+            'latitude': 0,
+            'longitude': 0,
+            'temperature': 0,
+            'pressure': 0
+        }
 
-        # Auto-connect if configured
+        # Auto-connect from config
         if parent is not None and hasattr(parent, 'config'):
             cfg_port = parent.config.get("imu")
-            cfg_baud = parent.config.get("imu_baud")
+            cfg_baud = parent.config.get("imu_baud", 115200)
             if cfg_port:
-                self.port_combo.setCurrentText(cfg_port)
-            if cfg_baud:
-                self.baud_combo.setCurrentText(str(cfg_baud))
-            if cfg_port:
-                self.connect()
+                self.connect(cfg_port, int(cfg_baud))
 
-    def connect(self):
+    def connect(self, port, baud):
         if self._connected:
-            return self.status_signal.emit("Already connected")
-        port = self.port_combo.currentText().strip()
-        baud = int(self.baud_combo.currentText())
+            return self.status_signal.emit("IMU already connected.")
         try:
             self.serial = serial.Serial(port, baud, timeout=1)
         except Exception as e:
-            return self.status_signal.emit(f"Fail: {e}")
+            return self.status_signal.emit(f"IMU connection failed: {e}")
         self._connected = True
-        self.status_signal.emit(f"IMU on {port}@{baud}")
-        # Start background IMU read thread
+        self.status_signal.emit(f"IMU connected on {port}@{baud}")
         self.stop_evt = start_imu_read_thread(self.serial, self.latest)
-        # Start timer to refresh displayed values
         self.update_timer = QTimer(self)
         self.update_timer.timeout.connect(self._refresh)
         self.update_timer.start(100)
@@ -107,22 +86,24 @@ class IMUController(QObject):
         r, p, y = self.latest['rpy']
         lat, lon = self.latest['latitude'], self.latest['longitude']
         t, pres = self.latest['temperature'], self.latest['pressure']
-        self.data_label.setText(f"R={r:.1f}°, P={p:.1f}°, Y={y:.1f}°\n"
-                                 f"T={t:.1f}°C, P={pres:.1f}hPa\n"
-                                 f"Lat={lat:.5f}, Lon={lon:.5f}")
-        # Rotate rectangle based on pitch (up/down) and roll (side tilt)
-        theta = np.deg2rad(self.latest['rpy'][0])  # Roll
-        phi = np.deg2rad(self.latest['rpy'][1])   # Pitch
-        
-        # 2D rotation based on roll for simple tilt effect
-        cos_r, sin_r = np.cos(theta), np.sin(theta)
-        transform = pg.QtGui.QTransform(
+        self.data_label.setText(
+            f"R={r:.1f}°, P={p:.1f}°, Y={y:.1f}°\n"
+            f"T={t:.1f}°C, P={pres:.1f}hPa\n"
+            f"Lat={lat:.5f}, Lon={lon:.5f}"
+        )
+
+        # Apply roll (x-rotation) and pitch (y-tilt) to rectangle
+        roll = np.deg2rad(r)
+        pitch = np.deg2rad(p)
+        cos_r, sin_r = np.cos(roll), np.sin(roll)
+
+        # You can also include pitch as a scaling or y-offset for realism
+        transform = QtGui.QTransform(
             cos_r, -sin_r,
             sin_r, cos_r,
-            0, 0
+            0, -pitch  # vertical shift simulating tilt
         )
         self.rect_item.setTransform(transform)
-
 
     def is_connected(self):
         return self._connected
