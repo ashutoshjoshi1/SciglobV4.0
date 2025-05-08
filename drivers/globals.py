@@ -15,3 +15,7 @@ m_DateTime_start = 0
 m_PreviousTimeStamp = 0
 m_SummatedTimeStamps = 0.0
 mSelectedDevRow = 0
+
+
+
+
